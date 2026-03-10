@@ -30,6 +30,8 @@ import {
   EventType
 } from "@/types";
 import { eventBus } from "@/lib/eventBus";
+import { clamp, calculateProductivity, validateAPAllocation, shouldEmployeeChurn } from "@/lib/utils";
+import { logger, logSagaProgress, logEmployeeAction, logAPAllocation } from "@/lib/logger";
 
 interface GameStore extends NormalizedGameState {
   // Initialization
@@ -259,7 +261,7 @@ export const useGameStore = create<GameStore>()(
         const company = state.companies[state.currentCompanyId];
         if (company) {
           company.money += choice.moneyReward;
-          company.reputation = Math.max(0, Math.min(100, company.reputation + choice.reputationReward));
+          company.reputation = clamp(company.reputation + choice.reputationReward, 0, 100);
         }
       });
 
@@ -294,7 +296,7 @@ export const useGameStore = create<GameStore>()(
         const company = state.companies[state.currentCompanyId];
         if (company) {
           company.money += s.rewardMoney;
-          company.reputation = Math.max(0, Math.min(100, company.reputation + s.rewardReputation));
+          company.reputation = clamp(company.reputation + s.rewardReputation, 0, 100);
         }
       });
 
@@ -413,7 +415,7 @@ export const useGameStore = create<GameStore>()(
         const emp = state.employees[employeeId];
         if (!emp) return;
 
-        emp.stress = Math.max(0, Math.min(100, emp.stress + delta));
+        emp.stress = clamp(emp.stress + delta, 0, 100);
         emp.productivity = calculateProductivity(emp.stress, emp.morale);
       });
 
@@ -445,7 +447,7 @@ export const useGameStore = create<GameStore>()(
         if (!emp) return;
 
         const oldMorale = emp.morale;
-        emp.morale = Math.max(0, Math.min(100, emp.morale + delta));
+        emp.morale = clamp(emp.morale + delta, 0, 100);
         emp.productivity = calculateProductivity(emp.stress, emp.morale);
 
         // Check for quit
@@ -536,7 +538,7 @@ export const useGameStore = create<GameStore>()(
         const company = state.companies[state.currentCompanyId];
         if (!company) return;
 
-        company.reputation = Math.max(0, Math.min(100, company.reputation + delta));
+        company.reputation = clamp(company.reputation + delta, 0, 100);
       });
 
       eventBus.emit({
@@ -668,11 +670,4 @@ export const useGameStore = create<GameStore>()(
 // HELPER FUNCTIONS
 // ============================================================================
 
-function calculateProductivity(stress: number, morale: number): number {
-  // Base productivity is 100
-  // Stress reduces it (0-100 stress = 100-0 impact)
-  // Morale boosts it (0-100 morale = 0-50 boost)
-  const stressImpact = 100 - stress;
-  const moraleBoost = (morale / 100) * 50;
-  return Math.max(0, Math.min(150, stressImpact + moraleBoost));
-}
+// calculateProductivity is now in lib/utils.ts for reusability
