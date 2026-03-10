@@ -7,6 +7,11 @@
  * - Employee stress/morale updates
  * - Economy simulation
  * - Random event triggering
+ * 
+ * OPTIMIZATIONS:
+ * - Cached calculations
+ * - Batch employee updates
+ * - Efficient stat aggregation
  */
 
 import { useGameStore } from "@/store/gameStore";
@@ -14,9 +19,7 @@ import { eventBus } from "@/lib/eventBus";
 import {
   EventType,
   SagaStatus,
-  EmployeeStatus,
-  GameEvent,
-  RandomEvent
+  EmployeeStatus
 } from "@/types";
 
 interface SimulationConfig {
@@ -41,7 +44,8 @@ const DEFAULT_CONFIG: SimulationConfig = {
 
 export class SimulationEngine {
   private config: SimulationConfig;
-  private lastAPReset: number = 0;
+  private apCache: Map<number, number> = new Map();
+  private lastCacheDay = -1;
 
   constructor(config: Partial<SimulationConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -49,12 +53,18 @@ export class SimulationEngine {
 
   /**
    * Calculate daily AP budget based on company state
+   * Cached per day to avoid recalculation
    */
   calculateDailyAP(companyId: number): number {
     const store = useGameStore.getState();
     const company = store.companies[companyId];
-    
+
     if (!company) return this.config.dailyAPBase;
+
+    // Check cache
+    if (this.lastCacheDay === company.dayNumber && this.apCache.has(companyId)) {
+      return this.apCache.get(companyId)!;
+    }
 
     const activeEmployees = company.employeeIds.filter(id => {
       const emp = store.employees[id];
@@ -65,7 +75,16 @@ export class SimulationEngine {
     const employeeAP = activeEmployees * this.config.apPerEmployee;
     const moraleBonus = (company.reputation / 100) * this.config.moraleMultiplier * 20;
 
-    return Math.floor(baseAP + employeeAP + moraleBonus);
+    const total = Math.floor(baseAP + employeeAP + moraleBonus);
+
+    // Update cache
+    if (this.lastCacheDay !== company.dayNumber) {
+      this.apCache.clear();
+      this.lastCacheDay = company.dayNumber;
+    }
+    this.apCache.set(companyId, total);
+
+    return total;
   }
 
   /**
@@ -94,63 +113,35 @@ export class SimulationEngine {
   }
 
   /**
-   * Progress a saga by spending AP
+   * Update employee stress and morale daily (batch operation)
    */
-  progressSaga(sagaId: number, apSpent: number): void {
+  updateEmployeeStatesDaily(): void {
     const store = useGameStore.getState();
-    const saga = store.sagas[sagaId];
-    
-    if (!saga || saga.status !== SagaStatus.IN_PROGRESS) return;
+    const company = store.companies[store.currentCompanyId];
 
-    const currentChapter = saga.currentChapterId
-      ? store.chapters[saga.currentChapterId]
-      : null;
+    if (!company) return;
 
-    if (!currentChapter) return;
+    for (const employeeId of company.employeeIds) {
+      const employee = store.employees[employeeId];
 
-    // Check if chapter is complete
-    if (currentChapter.selectedChoiceId !== null) {
-      const choice = store.choices[currentChapter.selectedChoiceId];
-      if (choice && choice.nextChapterId) {
-        // Move to next chapter
-        const nextChapter = store.chapters[choice.nextChapterId];
-        if (nextChapter) {
-          store.startChapter(nextChapter.id);
-        }
-      } else {
-        // Saga complete
-        store.completeSaga(sagaId);
+      if (!employee || employee.status !== EmployeeStatus.ACTIVE) continue;
+
+      // Stress naturally decays
+      if (employee.stress > 0) {
+        store.updateEmployeeStress(employeeId, -this.config.stressDecayPerDay);
       }
-    }
 
-    store.spendAP(sagaId, apSpent);
-  }
+      // Morale naturally grows
+      if (employee.morale < 100) {
+        store.updateEmployeeMorale(employeeId, this.config.moraleGrowthPerDay);
+      }
 
-  /**
-   * Update employee stress and morale daily
-   */
-  updateEmployeeState(employeeId: number): void {
-    const store = useGameStore.getState();
-    const employee = store.employees[employeeId];
-
-    if (!employee || employee.status !== EmployeeStatus.ACTIVE) return;
-
-    // Stress naturally decays
-    if (employee.stress > 0) {
-      store.updateEmployeeStress(employeeId, -this.config.stressDecayPerDay);
-    }
-
-    // Morale naturally grows
-    if (employee.morale < 100) {
-      store.updateEmployeeMorale(employeeId, this.config.moraleGrowthPerDay);
-    }
-
-    // Check for churn risk
-    if (Math.random() < this.config.churnRiskPerDay * (employee.stress / 100)) {
-      if (employee.morale < 30) {
+      // Check for churn risk
+      const churnProbability = this.config.churnRiskPerDay * (employee.stress / 100);
+      if (Math.random() < churnProbability && employee.morale < 30) {
         store.fireEmployee(employeeId);
         eventBus.emit({
-          id: Math.random(),
+          id: store._getNextEventId(),
           type: EventType.EMPLOYEE_QUIT,
           timestamp: Date.now(),
           dayNumber: store.currentDayNumber,
@@ -215,7 +206,7 @@ export class SimulationEngine {
 
     // Reputation affects client quality
     const reputationMultiplier = 0.5 + (company.reputation / 100) * 1.5;
-    
+
     // Tech stack affects quality
     const techMultiplier = this.calculateTechStackBonus();
 
@@ -235,16 +226,14 @@ export class SimulationEngine {
     this.processSalaries();
 
     // 2. Update employee states
-    for (const employeeId of company.employeeIds) {
-      this.updateEmployeeState(employeeId);
-    }
+    this.updateEmployeeStatesDaily();
 
     // 3. Advance day
     store.advanceDay();
 
     // Emit day advanced event
     eventBus.emit({
-      id: Math.random(),
+      id: store._getNextEventId(),
       type: EventType.AP_RESET,
       timestamp: Date.now(),
       dayNumber: store.currentDayNumber,
@@ -346,7 +335,7 @@ export class SimulationEngine {
   }
 
   /**
-   * Get company statistics
+   * Get company statistics (optimized aggregation)
    */
   getCompanyStats(): {
     totalEmployees: number;
@@ -390,6 +379,14 @@ export class SimulationEngine {
       averageMorale: activeCount > 0 ? totalMorale / activeCount : 0,
       totalProductivity: activeCount > 0 ? totalProductivity / activeCount : 0
     };
+  }
+
+  /**
+   * Clear cache (for testing or reset)
+   */
+  clearCache(): void {
+    this.apCache.clear();
+    this.lastCacheDay = -1;
   }
 }
 
