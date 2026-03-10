@@ -26,12 +26,14 @@ import {
   APAllocation,
   GameEvent,
   SagaStatus,
+  ChapterStatus,
   EmployeeStatus,
   EventType
 } from "@/types";
 import { eventBus } from "@/lib/eventBus";
 import { clamp, calculateProductivity, validateAPAllocation, shouldEmployeeChurn } from "@/lib/utils";
 import { logger, logSagaProgress, logEmployeeAction, logAPAllocation } from "@/lib/logger";
+import { devConsole } from "@/lib/devConsole";
 
 interface GameStore extends NormalizedGameState {
   // Initialization
@@ -157,11 +159,11 @@ export const useGameStore = create<GameStore>()(
 
       // Validation
       if (!saga) {
-        console.warn(`Saga ${sagaId} not found`);
+        devConsole.addLog("warn", `Saga ${sagaId} not found`, undefined, "gameStore");
         return false;
       }
       if (saga.status !== SagaStatus.AVAILABLE) {
-        console.warn(`Saga ${sagaId} is not available (status: ${saga.status})`);
+        devConsole.addLog("warn", `Saga ${sagaId} is not available (status: ${saga.status})`, undefined, "gameStore");
         return false;
       }
 
@@ -174,11 +176,11 @@ export const useGameStore = create<GameStore>()(
 
         // Start first chapter
         const firstChapter = Object.values(state.chapters).find(
-          (ch: any) => ch.sagaId === sagaId && ch.sequenceNumber === 1
-        ) as Chapter | undefined;
+          (ch): ch is Chapter => ch.sagaId === sagaId && ch.sequenceNumber === 1
+        );
 
         if (firstChapter) {
-          firstChapter.status = "available" as any;
+          firstChapter.status = ChapterStatus.AVAILABLE;
           s.currentChapterId = firstChapter.id;
         }
       });
@@ -202,14 +204,14 @@ export const useGameStore = create<GameStore>()(
       const chapter = store.chapters[chapterId];
 
       if (!chapter) {
-        console.warn(`Chapter ${chapterId} not found`);
+        devConsole.addLog("warn", `Chapter ${chapterId} not found`, undefined, "gameStore");
         return false;
       }
 
       set(state => {
         const ch = state.chapters[chapterId];
         if (ch) {
-          ch.status = "in_progress" as any;
+          ch.status = ChapterStatus.IN_PROGRESS;
         }
       });
 
@@ -232,13 +234,13 @@ export const useGameStore = create<GameStore>()(
       const choice = store.choices[choiceId];
 
       if (!choice) {
-        console.warn(`Choice ${choiceId} not found`);
+        devConsole.addLog("warn", `Choice ${choiceId} not found`, undefined, "gameStore");
         return false;
       }
 
       const chapter = store.chapters[choice.chapterId];
       if (!chapter) {
-        console.warn(`Chapter ${choice.chapterId} not found`);
+        devConsole.addLog("warn", `Chapter ${choice.chapterId} not found`, undefined, "gameStore");
         return false;
       }
 
@@ -247,13 +249,13 @@ export const useGameStore = create<GameStore>()(
         if (!ch) return;
 
         ch.selectedChoiceId = choiceId;
-        ch.status = "completed" as any;
+        ch.status = ChapterStatus.COMPLETED;
 
         // Move to next chapter if available
         if (choice.nextChapterId) {
           const nextChapter = state.chapters[choice.nextChapterId];
           if (nextChapter) {
-            nextChapter.status = "available" as any;
+            nextChapter.status = ChapterStatus.AVAILABLE;
           }
         }
 
@@ -281,7 +283,7 @@ export const useGameStore = create<GameStore>()(
       const saga = store.sagas[sagaId];
 
       if (!saga) {
-        console.warn(`Saga ${sagaId} not found`);
+        devConsole.addLog("warn", `Saga ${sagaId} not found`, undefined, "gameStore");
         return false;
       }
 
@@ -340,7 +342,7 @@ export const useGameStore = create<GameStore>()(
       }
 
       if (company.employeeIds.length >= company.maxEmployees) {
-        console.warn(`Max employees (${company.maxEmployees}) reached`);
+        devConsole.addLog("warn", `Max employees (${company.maxEmployees}) reached`, undefined, "gameStore");
         return false;
       }
 
@@ -372,7 +374,7 @@ export const useGameStore = create<GameStore>()(
       const employee = store.employees[employeeId];
 
       if (!employee) {
-        console.warn(`Employee ${employeeId} not found`);
+        devConsole.addLog("warn", `Employee ${employeeId} not found`, undefined, "gameStore");
         return false;
       }
 
@@ -407,7 +409,7 @@ export const useGameStore = create<GameStore>()(
       const employee = store.employees[employeeId];
 
       if (!employee) {
-        console.warn(`Employee ${employeeId} not found`);
+        devConsole.addLog("warn", `Employee ${employeeId} not found`, undefined, "gameStore");
         return false;
       }
 
@@ -438,7 +440,7 @@ export const useGameStore = create<GameStore>()(
       const employee = store.employees[employeeId];
 
       if (!employee) {
-        console.warn(`Employee ${employeeId} not found`);
+        devConsole.addLog("warn", `Employee ${employeeId} not found`, undefined, "gameStore");
         return false;
       }
 

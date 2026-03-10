@@ -14,6 +14,7 @@
  */
 
 import { GameEvent, EventType } from "@/types";
+import { devConsole } from "@/lib/devConsole";
 
 type EventListener = (event: GameEvent) => void;
 
@@ -53,8 +54,11 @@ class EventBus {
 
     // Prevent memory leaks
     if (listeners.size >= this.config.maxListenersPerEvent) {
-      console.warn(
-        `Event bus: Max listeners (${this.config.maxListenersPerEvent}) reached for ${eventType}`
+      devConsole.addLog(
+        "warn",
+        `Event bus: Max listeners (${this.config.maxListenersPerEvent}) reached for ${eventType}`,
+        undefined,
+        "eventBus"
       );
       return { unsubscribe: () => {} };
     }
@@ -94,7 +98,12 @@ class EventBus {
     if (this.config.enableDeduplication) {
       const eventHash = this.hashEvent(event);
       if (eventHash === this.lastEventHash) {
-        console.warn("Event bus: Duplicate event detected, skipping", event.type);
+        devConsole.addLog(
+          "warn",
+          `Event bus: Duplicate event detected, skipping ${event.type}`,
+          undefined,
+          "eventBus"
+        );
         return;
       }
       this.lastEventHash = eventHash;
@@ -113,9 +122,12 @@ class EventBus {
         try {
           listener(event);
         } catch (error) {
-          console.error(
-            `Event bus: Error in listener for ${event.type}:`,
-            error instanceof Error ? error.message : error
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          devConsole.addLog(
+            "error",
+            `Event bus: Error in listener for ${event.type}: ${errorMsg}`,
+            error,
+            "eventBus"
           );
           // Continue with other listeners even if one fails
         }
