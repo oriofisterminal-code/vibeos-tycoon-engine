@@ -1,0 +1,58 @@
+[
+  {
+    "id": 1,
+    "sagaId": 1,
+    "sequenceNumber": 1,
+    "title": "Find a Client",
+    "description": "Search for and pitch to potential clients. You need to find someone willing to pay for a small website.",
+    "status": "available",
+    "choiceIds": [1, 2, 3],
+    "selectedChoiceId": null,
+    "requiredAPCost": 20,
+    "requiredEmployeeCount": null,
+    "requiredReputation": null,
+    "completedAt": null
+  },
+  {
+    "id": 2,
+    "sagaId": 1,
+    "sequenceNumber": 2,
+    "title": "Deliver the Project",
+    "description": "Build and deliver the website to your client. Your reputation depends on quality and timeliness.",
+    "status": "locked",
+    "choiceIds": [4, 5, 6],
+    "selectedChoiceId": null,
+    "requiredAPCost": 30,
+    "requiredEmployeeCount": null,
+    "requiredReputation": null,
+    "completedAt": null
+  },
+  {
+    "id": 3,
+    "sagaId": 2,
+    "sequenceNumber": 1,
+    "title": "Recruit Developers",
+    "description": "Post job listings and interview candidates for your first developer positions.",
+    "status": "locked",
+    "choiceIds": [7, 8, 9],
+    "selectedChoiceId": null,
+    "requiredAPCost": 40,
+    "requiredEmployeeCount": null,
+    "requiredReputation": 10,
+    "completedAt": null
+  },
+  {
+    "id": 4,
+    "sagaId": 2,
+    "sequenceNumber": 2,
+    "title": "Establish Team Culture",
+    "description": "Build team cohesion and establish company values and processes.",
+    "status": "locked",
+    "choiceIds": [10, 11, 12],
+    "selectedChoiceId": null,
+    "requiredAPCost": 30,
+    "requiredEmployeeCount": 2,
+    "requiredReputation": null,
+    "completedAt": null
+  }
+]

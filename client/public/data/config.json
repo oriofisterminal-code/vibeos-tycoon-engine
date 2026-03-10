@@ -1,0 +1,53 @@
+{
+  "game": {
+    "name": "VibeOS: Software Company Tycoon",
+    "version": "0.1.0",
+    "startingMoney": 10000,
+    "startingReputation": 10,
+    "startingEmployees": 0,
+    "maxEmployees": 50
+  },
+  "ap": {
+    "dailyBudget": 100,
+    "baseAPPerEmployee": 10,
+    "moraleMultiplier": 0.5,
+    "carryoverPercentage": 0.5
+  },
+  "economy": {
+    "minSalary": 2000,
+    "maxSalary": 15000,
+    "salaryGrowthPerYear": 1.05,
+    "clientQualityMultiplier": 0.5
+  },
+  "employee": {
+    "stressThreshold": 80,
+    "moraleThreshold": 30,
+    "churnRiskPerDay": 0.01,
+    "stressDecayPerDay": 2,
+    "moraleGrowthPerDay": 1
+  },
+  "difficulty": {
+    "easy": {
+      "apMultiplier": 1.5,
+      "rewardMultiplier": 0.8,
+      "eventFrequency": 0.5
+    },
+    "normal": {
+      "apMultiplier": 1.0,
+      "rewardMultiplier": 1.0,
+      "eventFrequency": 1.0
+    },
+    "hard": {
+      "apMultiplier": 0.7,
+      "rewardMultiplier": 1.3,
+      "eventFrequency": 1.5
+    }
+  },
+  "features": {
+    "enableRandomEvents": true,
+    "enableEmployeePersonalities": true,
+    "enableTechStacks": true,
+    "enableModding": true,
+    "enableMultiplayer": false
+  }
+}
