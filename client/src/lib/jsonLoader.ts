@@ -17,6 +17,7 @@ interface LoaderConfig {
   cache?: boolean;
   timeout?: number;
   debugMode?: boolean;
+  maxCacheSize?: number; // Max entries in cache
 }
 
 interface CacheEntry<T> {
@@ -26,16 +27,17 @@ interface CacheEntry<T> {
 }
 
 class JSONLoader {
-  private cache = new Map<string, CacheEntry<any>>();
-  private config: Required<LoaderConfig>;
-  private loadingPromises = new Map<string, Promise<any>>();
+  private cache = new Map<string, CacheEntry<unknown>>();
+  private config: Required<LoaderConfig & { maxCacheSize: number }>;
+  private loadingPromises = new Map<string, Promise<unknown>>();
 
   constructor(config: LoaderConfig = {}) {
     this.config = {
       baseUrl: config.baseUrl ?? "/data",
       cache: config.cache ?? true,
       timeout: config.timeout ?? 10000,
-      debugMode: config.debugMode ?? false
+      debugMode: config.debugMode ?? false,
+      maxCacheSize: config.maxCacheSize ?? 100
     };
   }
 
@@ -44,7 +46,7 @@ class JSONLoader {
    */
   async loadJSON<T>(
     path: string,
-    schema: any,
+    schema: unknown,
     options?: { cache?: boolean; timeout?: number }
   ): Promise<{ success: true; data: T } | { success: false; error: string }> {
     const cacheKey = path;
@@ -55,12 +57,12 @@ class JSONLoader {
     if (useCache && this.cache.has(cacheKey)) {
       const cached = this.cache.get(cacheKey)!;
       devConsole.addLog("debug", `Loaded from cache: ${path}`, undefined, "jsonLoader");
-      return { success: true, data: cached.data };
+      return { success: true, data: cached.data as T };
     }
 
     // Prevent duplicate requests
     if (this.loadingPromises.has(cacheKey)) {
-      return this.loadingPromises.get(cacheKey)!;
+      return this.loadingPromises.get(cacheKey)! as Promise<{ success: true; data: T } | { success: false; error: string }>;
     }
 
     // Create loading promise
@@ -76,6 +78,7 @@ class JSONLoader {
           data: result.data,
           timestamp: Date.now()
         });
+        this.manageCacheSize();
       }
 
       return result;
@@ -129,7 +132,7 @@ class JSONLoader {
   }
 
   /**
-   * Clear cache
+   * Clear cache with size management
    */
   clearCache(path?: string): void {
     if (path) {
@@ -138,6 +141,26 @@ class JSONLoader {
     } else {
       this.cache.clear();
       devConsole.addLog("debug", "Cleared all cache", undefined, "jsonLoader");
+    }
+  }
+
+  /**
+   * Manage cache size to prevent memory bloat
+   */
+  private manageCacheSize(): void {
+    if (this.cache.size > this.config.maxCacheSize) {
+      // Remove oldest entries (FIFO)
+      const entriesToRemove = this.cache.size - this.config.maxCacheSize;
+      let removed = 0;
+      const keys = Array.from(this.cache.keys());
+      
+      for (const key of keys) {
+        if (removed >= entriesToRemove) break;
+        this.cache.delete(key);
+        removed++;
+      }
+      
+      devConsole.addLog("debug", `Cache size exceeded, removed ${removed} entries`, undefined, "jsonLoader");
     }
   }
 
@@ -156,7 +179,7 @@ class JSONLoader {
    */
   private async fetchAndValidate<T>(
     path: string,
-    schema: any,
+    schema: unknown,
     timeout: number
   ): Promise<{ success: true; data: T } | { success: false; error: string }> {
     try {
@@ -181,7 +204,7 @@ class JSONLoader {
       const json = await response.json();
 
       // Validate with schema
-      const validation = validateData(schema, json);
+      const validation = validateData(schema as any, json);
       if (!validation.valid) {
         const error = `Validation failed for ${path}: ${validation.errors.join(", ")}`;
         devConsole.addLog("error", error, validation.errors, "jsonLoader");
@@ -189,7 +212,7 @@ class JSONLoader {
       }
 
       devConsole.addLog("info", `Loaded: ${path}`, undefined, "jsonLoader");
-      return { success: true, data: validation.data as T };
+      return { success: true, data: validation.data as unknown as T };
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
       devConsole.addLog("error", `Error loading ${path}: ${error}`, err, "jsonLoader");

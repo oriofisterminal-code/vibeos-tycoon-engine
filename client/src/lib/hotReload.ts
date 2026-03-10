@@ -27,6 +27,8 @@ class HotReloadManager {
   private watchedFiles = new Map<string, number>(); // path -> lastModified
   private pollInterval: NodeJS.Timeout | null = null;
   private currentData: GameData | null = null;
+  private reloadInProgress = false; // Prevent concurrent reloads
+  private lastReloadTime = 0; // Debounce reloads
 
   constructor(config: HotReloadConfig = { enabled: false }) {
     this.config = {
@@ -98,10 +100,19 @@ class HotReloadManager {
   }
 
   /**
-   * Check for file changes
+   * Check for file changes with debouncing
    */
   private async checkForChanges(): Promise<void> {
+    // Prevent concurrent reloads
+    if (this.reloadInProgress) return;
+    
+    // Debounce: don't reload more than once per second
+    const now = Date.now();
+    if (now - this.lastReloadTime < 1000) return;
+
     try {
+      let hasChanges = false;
+      
       for (const path of this.config.watchPaths) {
         const response = await fetch(path, { method: "HEAD" });
 
@@ -115,8 +126,14 @@ class HotReloadManager {
 
         if (newTime > oldTime) {
           this.watchedFiles.set(path, newTime);
-          await this.reloadData(path);
+          hasChanges = true;
+          break; // Reload once for any change
         }
+      }
+      
+      if (hasChanges) {
+        this.lastReloadTime = now;
+        await this.reloadData("");
       }
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
@@ -125,9 +142,12 @@ class HotReloadManager {
   }
 
   /**
-   * Reload data from file
+   * Reload data from file with concurrency control
    */
   private async reloadData(path: string): Promise<void> {
+    if (this.reloadInProgress) return;
+    this.reloadInProgress = true;
+    
     try {
       // Clear cache for this file
       jsonLoader.clearCache(path);
@@ -159,6 +179,8 @@ class HotReloadManager {
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
       devConsole.addLog("error", `Hot reload error: ${error}`, err, "hotReload");
+    } finally {
+      this.reloadInProgress = false;
     }
   }
 

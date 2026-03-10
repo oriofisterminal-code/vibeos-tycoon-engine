@@ -43,7 +43,7 @@ class ModManager {
       // Load mod list
       const listResult = await jsonLoader.loadJSON<string[]>(
         `${modsDirectory}/modlist.json`,
-        GameDataSchema // Use any schema for array
+        GameDataSchema
       );
 
       if (!listResult.success) {
@@ -51,7 +51,11 @@ class ModManager {
         return { success: true, errors: [] };
       }
 
-      const modIds = listResult.data as unknown as string[];
+      // Ensure modIds is an array of strings
+      const modIds = Array.isArray(listResult.data) ? listResult.data : [];
+      if (!modIds.every(id => typeof id === 'string')) {
+        return { success: false, errors: ["Invalid modlist.json format"] };
+      }
 
       // Load each mod
       for (const modId of modIds) {
@@ -99,7 +103,7 @@ class ModManager {
         return { success: false, error: `Failed to load manifest for ${modId}` };
       }
 
-      const manifest = manifestResult.data as unknown as any;
+      const manifest = manifestResult.data as Record<string, unknown>;
 
       // Load mod data
       const dataPath = `${modPath}/data.json`;
@@ -109,16 +113,21 @@ class ModManager {
         return { success: false, error: `Failed to load data for ${modId}` };
       }
 
+      // Validate manifest structure
+      if (!manifest.name || typeof manifest.name !== 'string') {
+        return { success: false, error: `Invalid manifest for ${modId}: missing name` };
+      }
+
       // Store mod
       this.mods.set(modId, {
         info: {
-          id: manifest.id || modId,
-          name: manifest.name,
-          version: manifest.version,
+          id: String(manifest.id || modId),
+          name: String(manifest.name),
+          version: String(manifest.version || "1.0.0"),
           enabled: manifest.enabled !== false,
-          priority: manifest.priority || 0,
-          dependencies: manifest.dependencies || [],
-          conflicts: manifest.conflicts || []
+          priority: typeof manifest.priority === 'number' ? manifest.priority : 0,
+          dependencies: Array.isArray(manifest.dependencies) ? manifest.dependencies.map(String) : [],
+          conflicts: Array.isArray(manifest.conflicts) ? manifest.conflicts.map(String) : []
         },
         data: dataResult.data
       });
